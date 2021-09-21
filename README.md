@@ -4,6 +4,23 @@ title: Home
 nav_order: 1
 ---
 
+# This is a fork of MediaPipe to demonstrate building MediaPipe as a Framework for iOS, in this case, the FaceMesh model
+- This builds an XCFramework into ./frameworkbuild/FaceMeshIOSLibFramework/xcframework
+    - The XCFramework contains both arm64 and x86_64 (iOS Simulator) parts, so you can use this on both real devices and on the iOS simulator
+- I've created the Objective-C file for the framework in //mediapipe/examples/ios/facemeshioslib
+
+# Usage
+## Building
+- prerequisites
+    - You need to have Google's Bazel installed. Personally I install via node (`npm install -g bazel`).
+- run `./BUILD_FACE_MESH_XCFRAMEWORK.sh`, the resulting framework should then appear in ./frameworkbuild/FaceMeshIOSLibFramework/xcframework/FaceMeshIOSLibFramework.xcframework
+    - Copy the framework and use it in your projects. You're welcome.
+    - Framework usage : `#import <FaceMeshIOSLibFramework/FaceMeshIOSLibFramework.h>`
+        - only one class : FaceMeshIOSLib
+            - delegate callback gives you an array of detected faces (But there's only one face configured in my graph.. so there's at most length 1)
+                - each face is an array of 468 `FaceMeshIOSLibFaceLandmarkPoint` points (x,y,z)
+
+
 ![MediaPipe](docs/images/mediapipe_small.png)
 
 --------------------------------------------------------------------------------
