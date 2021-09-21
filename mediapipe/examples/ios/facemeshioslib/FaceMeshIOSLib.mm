@@ -141,6 +141,9 @@ static const int kNumFaces = 1;
   if (streamName == kLandmarksOutputStream) {
     if (packet.IsEmpty()) {
       NSLog(@"[TS:%lld] No face landmarks", packet.Timestamp().Value());
+      if([self.delegate respondsToSelector:@selector(didReceiveFaces:)]) {
+        [self.delegate didReceiveFaces:@[]];
+      }
       return;
     }
     const auto& multi_face_landmarks = packet.Get<std::vector<::mediapipe::NormalizedLandmarkList>>();
