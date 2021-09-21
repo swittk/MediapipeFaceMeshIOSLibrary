@@ -20,6 +20,15 @@ nav_order: 1
             - delegate callback gives you an array of detected faces (But there's only one face configured in my graph.. so there's at most length 1)
                 - each face is an array of 468 `FaceMeshIOSLibFaceLandmarkPoint` points (x,y,z)
 
+## Resources
+- I couldn't have done this without these sources
+    - This great example : https://powderapp.medium.com/mediapipe-tutorial-find-memes-that-match-your-facial-expression-9bf598da98c0
+        - Mentioned from issue [here](https://github.com/google/mediapipe/issues/364)
+    - Mediapipe graph visualizer : https://viz.mediapipe.dev
+    - Understanding mediapipe graphs/calculators : I find it great to start here https://google.github.io/mediapipe/framework_concepts/calculators.html
+    - [This Stackoverflow thread for pointing out how to create XCFrameworks](https://stackoverflow.com/questions/63267897/building-for-ios-simulator-but-the-linked-framework-framework-was-built/65613941#65613941)
+        - I tried using good ol' `lipo -create ... -output ...` with the binaries and putting it in a normal `.framework`. XCode 12.4 refuses to build with the error `Building for iOS Simulator, but the linked and embedded framework was built for iOS + iOS Simulator`. It seemed not so long ago that I last used the `lipo` method. Things change so fast.
+
 
 ![MediaPipe](docs/images/mediapipe_small.png)
 
