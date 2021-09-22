@@ -161,6 +161,10 @@ static const int kNumFaces = 1;
     if (packet.IsEmpty()) { // This condition never gets called because FaceLandmarkFrontGpu does not process when there are no detections
       return;
     }
+    if(![self.delegate respondsToSelector:@selector(didReceiveFaces:)]) {
+      // If delegate doesn't expect this, don't process and waste CPU
+      return;
+    }
     const auto& multi_face_landmarks = packet.Get<std::vector<::mediapipe::NormalizedLandmarkList>>();
     // NSLog(@"[TS:%lld] Number of face instances with landmarks: %lu", packet.Timestamp().Value(),
           // multi_face_landmarks.size());
@@ -181,17 +185,19 @@ static const int kNumFaces = 1;
       }
       [faceLandmarks addObject:thisFaceLandmarks];
     }
-    if([self.delegate respondsToSelector:@selector(didReceiveFaces:)]) {
-      [self.delegate didReceiveFaces:faceLandmarks];
-    }
+    [self.delegate didReceiveFaces:faceLandmarks];
   }
 
   else if (streamName == kFaceRectsOutputStream) {
     if (packet.IsEmpty()) { // This condition never gets called because FaceLandmarkFrontGpu does not process when there are no detections
       // NSLog(@"[TS:%lld] No face rects", packet.Timestamp().Value());
       if([self.delegate respondsToSelector:@selector(didReceiveFaceBoxes:)]) {
+        // If delegate doesn't expect this, don't process and waste CPU
         [self.delegate didReceiveFaceBoxes:@[]];
       }
+      return;
+    }
+    if(![self.delegate respondsToSelector:@selector(didReceiveFaceBoxes:)]) {
       return;
     }
     const auto& face_rects_from_landmarks = packet.Get<std::vector<::mediapipe::NormalizedRect>>();
@@ -207,9 +213,7 @@ static const int kNumFaces = 1;
       rect.centerX = centerX; rect.centerY = centerY; rect.height = height; rect.width = width; rect.rotation = rotation;
       [outRects addObject:rect];
     }
-    if([self.delegate respondsToSelector:@selector(didReceiveFaceBoxes:)]) {
-      [self.delegate didReceiveFaceBoxes:outRects];
-    }
+    [self.delegate didReceiveFaceBoxes:outRects];
   }
   else if (streamName == kLandmarkPresenceOutputStream) {
     bool is_landmark_present = true;
