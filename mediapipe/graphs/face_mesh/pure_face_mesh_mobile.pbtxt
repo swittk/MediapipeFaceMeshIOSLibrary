@@ -25,10 +25,15 @@ output_stream: "face_rects_from_landmarks"
 # see detection.proto
 # Regions of interest calculated based on face detections.
 # (std::vector<NormalizedRect>)
-output_stream: "face_rects_from_detections"
+# output_stream: "face_rects_from_detections"
 
-# There's also face_rects_from_detections, but that likely isn't as accurate (it's from BlazeFace)
+# Extra outputs (for debugging, for instance).
+# Detected faces. (std::vector<Detection>)
+# (std::vector<Detections>)
+# output_stream: "face_detections"
 
+# Landmark presence (needed because whole graph won't emit anything if no faces are detected)
+output_stream: "landmark_presence"
 
 # screw the throttling, we do that ourselves.
 # *throttling node code was deleted from here*
@@ -44,9 +49,17 @@ node {
   # face_detections is the stream that comes out from face_detection_short_range_common
   # output_stream: "DETECTIONS:face_detections"
   
-  # we need to output this too because otherwise the graph outputs nothing
-  # for frames without faces, and that makes it pretty hard to use
-  output_stream: "ROIS_FROM_DETECTIONS:face_rects_from_detections"
+  # output_stream: "ROIS_FROM_DETECTIONS:face_rects_from_detections"
+}
+
+# See this thread here https://github.com/google/mediapipe/issues/850#issuecomment-683268033
+# "if there are no packets in the corresponding output stream, it is designed to wait until the packet comes in"
+# That means that we'd get absolutely nothing to work with and won't know if our frame had anythin!
+# So we add PacketPresenceCalculator
+node {
+  calculator: "PacketPresenceCalculator"
+  input_stream: "PACKET:multi_face_landmarks"
+  output_stream: "PRESENCE:landmark_presence"
 }
 
 # nope not rendering.

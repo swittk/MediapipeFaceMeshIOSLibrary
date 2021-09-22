@@ -123,6 +123,7 @@ objc_library(
     deps = [
         "//mediapipe/objc:mediapipe_framework_ios",
         "//mediapipe/objc:mediapipe_input_sources_ios",
+        "//mediapipe/calculators/core:packet_presence_calculator",
 #        "//mediapipe/objc:mediapipe_layer_renderer", # no need for layer renderer since I don't render
     ] + select({
 #        "//mediapipe:ios_i386": [],

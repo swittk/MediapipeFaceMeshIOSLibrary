@@ -7,6 +7,7 @@
 // NormalizedLandmarkList won't be defined unless we import this header (following FaceMeshGpuViewController's imports)
 #include "mediapipe/framework/formats/landmark.pb.h"
 #include "mediapipe/framework/formats/rect.pb.h"
+#include "mediapipe/framework/formats/detection.pb.h"
 
 //#import "mediapipe/objc/MPPLayerRenderer.h"
 
@@ -20,7 +21,9 @@ static const char* kInputStream = "input_video";
 static const char* kNumFacesInputSidePacket = "num_faces";
 static const char* kLandmarksOutputStream = "multi_face_landmarks";
 static const char* kFaceRectsOutputStream = "face_rects_from_landmarks";
-static const char* kFaceDetectionRectsOutputStream = "face_rects_from_detections";
+static const char* kLandmarkPresenceOutputStream = "landmark_presence";
+// static const char* kFaceDetectionRectsOutputStream = "face_rects_from_detections";
+// static const char* kFaceDetectionsRawDetectionsOutputStream = "face_detections";
 
 // Max number of faces to detect/process.
 static const int kNumFaces = 1;
@@ -78,8 +81,14 @@ static const int kNumFaces = 1;
                           outputPacketType:MPPPacketTypeRaw];
   // The face detections rect output stream
   // This is kind of almost direct from blazeface I think, so it's likely out every frame.
+  // Turns out this doesn't come out at all... what the heck
   // [newGraph addFrameOutputStream:kFaceDetectionRectsOutputStream
   //                         outputPacketType:MPPPacketTypeRaw];
+
+  // The Presence Detection stream
+  // This is with much much many many thanks to @homuler here: https://github.com/google/mediapipe/issues/850#issuecomment-683268033
+  [newGraph addFrameOutputStream:kLandmarkPresenceOutputStream
+                           outputPacketType:MPPPacketTypeRaw];
   return newGraph;
 }
 
@@ -149,12 +158,12 @@ static const int kNumFaces = 1;
      didOutputPacket:(const ::mediapipe::Packet&)packet
           fromStream:(const std::string&)streamName {
   if (streamName == kLandmarksOutputStream) {
-    if (packet.IsEmpty()) {
+    if (packet.IsEmpty()) { // This condition never gets called because FaceLandmarkFrontGpu does not process when there are no detections
       return;
     }
     const auto& multi_face_landmarks = packet.Get<std::vector<::mediapipe::NormalizedLandmarkList>>();
-    NSLog(@"[TS:%lld] Number of face instances with landmarks: %lu", packet.Timestamp().Value(),
-          multi_face_landmarks.size());
+    // NSLog(@"[TS:%lld] Number of face instances with landmarks: %lu", packet.Timestamp().Value(),
+          // multi_face_landmarks.size());
     NSMutableArray <NSArray <FaceMeshIOSLibFaceLandmarkPoint *>*>*faceLandmarks = [NSMutableArray new];
     
     for (int face_index = 0; face_index < multi_face_landmarks.size(); ++face_index) {
@@ -176,35 +185,11 @@ static const int kNumFaces = 1;
       [self.delegate didReceiveFaces:faceLandmarks];
     }
   }
-  else if (streamName == kFaceDetectionRectsOutputStream) {
-    if (packet.IsEmpty()) {
-      NSLog(@"[TS:%lld] No face detections", packet.Timestamp().Value());
-      if([self.delegate respondsToSelector:@selector(didReceiveFaces:)]) {
-        [self.delegate didReceiveFaceBoxes:@[]];
-      }
-      return;
-    }
-    const auto& face_rects_from_landmarks = packet.Get<std::vector<::mediapipe::NormalizedRect>>();
-    NSMutableArray <FaceMeshIOSLibNormalizedRect *>*outRects = [NSMutableArray new];
-    for (int face_index = 0; face_index < face_rects_from_landmarks.size(); ++face_index) {
-      const auto& face = face_rects_from_landmarks[face_index];
-      float centerX = face.x_center();
-      float centerY = face.y_center();
-      float height = face.height();
-      float width = face.width();
-      float rotation = face.rotation();
-      FaceMeshIOSLibNormalizedRect *rect = [FaceMeshIOSLibNormalizedRect new];
-      rect.centerX = centerX; rect.centerY = centerY; rect.height = height; rect.width = width; rect.rotation = rotation;
-      [outRects addObject:rect];
-    }
-    if([self.delegate respondsToSelector:@selector(didReceiveFaceDetections:)]) {
-      [self.delegate didReceiveFaceDetections:outRects];
-    }
-  }
+
   else if (streamName == kFaceRectsOutputStream) {
-    if (packet.IsEmpty()) {
-      NSLog(@"[TS:%lld] No face rects", packet.Timestamp().Value());
-      if([self.delegate respondsToSelector:@selector(didReceiveFaces:)]) {
+    if (packet.IsEmpty()) { // This condition never gets called because FaceLandmarkFrontGpu does not process when there are no detections
+      // NSLog(@"[TS:%lld] No face rects", packet.Timestamp().Value());
+      if([self.delegate respondsToSelector:@selector(didReceiveFaceBoxes:)]) {
         [self.delegate didReceiveFaceBoxes:@[]];
       }
       return;
@@ -226,6 +211,32 @@ static const int kNumFaces = 1;
       [self.delegate didReceiveFaceBoxes:outRects];
     }
   }
+  else if (streamName == kLandmarkPresenceOutputStream) {
+    bool is_landmark_present = true;
+    if (packet.IsEmpty()) {
+      is_landmark_present = false;
+    }
+    else {
+      is_landmark_present = packet.Get<bool>();
+    }
+    if (is_landmark_present) {
+      // NSLog(@"Landmarks present");
+      // Landmarks are present; no need to do anything (the rest of the callbacks will get called on their own)
+    }
+    else {
+      // NSLog(@"Landmarks not present");
+      // No landmarks are present, we call our delegate with empty faces to make our protocol consistent with number of frames
+      if([self.delegate respondsToSelector:@selector(didReceiveFaceBoxes:)]) {
+        [self.delegate didReceiveFaceBoxes:@[]];
+      }
+      if([self.delegate respondsToSelector:@selector(didReceiveFaces:)]) {
+        [self.delegate didReceiveFaces:@[]];
+      }
+    }
+  }
+  else {
+    NSLog(@"Unknown %@ packet with stream name %s", packet.IsEmpty() ? @"EMPTY" : @"NON-EMPTY",streamName.c_str());
+  }
 }
 
 
@@ -235,14 +246,14 @@ static const int kNumFaces = 1;
   const auto ts =
       mediapipe::Timestamp(self.timestamp++ * mediapipe::Timestamp::kTimestampUnitsPerSecond);
   NSError* err = nil;
-  NSLog(@"sending imageBuffer @%@ to %s", @(ts.DebugString().c_str()), kInputStream);
+  // NSLog(@"sending imageBuffer @%@ to %s", @(ts.DebugString().c_str()), kInputStream);
   auto sent = [self.mediapipeGraph sendPixelBuffer:imageBuffer
                                         intoStream:kInputStream
                                         packetType:MPPPacketTypePixelBuffer
                                          timestamp:ts
                                     allowOverwrite:NO
                                              error:&err];
-  NSLog(@"imageBuffer %s", sent ? "sent!" : "not sent.");
+  // NSLog(@"imageBuffer %s", sent ? "sent!" : "not sent.");
   if (err) {
     NSLog(@"sendPixelBuffer error: %@", err);
   }
