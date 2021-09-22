@@ -6,3 +6,4 @@ mediapipe/provisioning_profile.mobileprovision
 .user.bazelrc
 .DS_STORE
 /frameworkbuild
+/Frameworks
