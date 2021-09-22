@@ -20,6 +20,7 @@ static const char* kInputStream = "input_video";
 static const char* kNumFacesInputSidePacket = "num_faces";
 static const char* kLandmarksOutputStream = "multi_face_landmarks";
 static const char* kFaceRectsOutputStream = "face_rects_from_landmarks";
+static const char* kFaceDetectionRectsOutputStream = "face_rects_from_detections";
 
 // Max number of faces to detect/process.
 static const int kNumFaces = 1;
@@ -68,8 +69,17 @@ static const int kNumFaces = 1;
   // Set graph configurations
   [newGraph setSidePacket:(mediapipe::MakePacket<int>(kNumFaces))
                               named:kNumFacesInputSidePacket];
+  // The landmarks output stream.
+  // !! This output does *not* give out any output when there are no faces detected by the face detector!
   [newGraph addFrameOutputStream:kLandmarksOutputStream
                           outputPacketType:MPPPacketTypeRaw];
+
+  [newGraph addFrameOutputStream:kFaceRectsOutputStream
+                          outputPacketType:MPPPacketTypeRaw];
+  // The face detections rect output stream
+  // This is kind of almost direct from blazeface I think, so it's likely out every frame.
+  // [newGraph addFrameOutputStream:kFaceDetectionRectsOutputStream
+  //                         outputPacketType:MPPPacketTypeRaw];
   return newGraph;
 }
 
@@ -140,10 +150,6 @@ static const int kNumFaces = 1;
           fromStream:(const std::string&)streamName {
   if (streamName == kLandmarksOutputStream) {
     if (packet.IsEmpty()) {
-      NSLog(@"[TS:%lld] No face landmarks", packet.Timestamp().Value());
-      if([self.delegate respondsToSelector:@selector(didReceiveFaces:)]) {
-        [self.delegate didReceiveFaces:@[]];
-      }
       return;
     }
     const auto& multi_face_landmarks = packet.Get<std::vector<::mediapipe::NormalizedLandmarkList>>();
@@ -170,11 +176,16 @@ static const int kNumFaces = 1;
       [self.delegate didReceiveFaces:faceLandmarks];
     }
   }
-  else if (streamName == kFaceRectsOutputStream) {
+  else if (streamName == kFaceDetectionRectsOutputStream) {
     if (packet.IsEmpty()) {
+      NSLog(@"[TS:%lld] No face detections", packet.Timestamp().Value());
+      if([self.delegate respondsToSelector:@selector(didReceiveFaces:)]) {
+        [self.delegate didReceiveFaceBoxes:@[]];
+      }
       return;
     }
     const auto& face_rects_from_landmarks = packet.Get<std::vector<::mediapipe::NormalizedRect>>();
+    NSMutableArray <FaceMeshIOSLibNormalizedRect *>*outRects = [NSMutableArray new];
     for (int face_index = 0; face_index < face_rects_from_landmarks.size(); ++face_index) {
       const auto& face = face_rects_from_landmarks[face_index];
       float centerX = face.x_center();
@@ -182,8 +193,38 @@ static const int kNumFaces = 1;
       float height = face.height();
       float width = face.width();
       float rotation = face.rotation();
+      FaceMeshIOSLibNormalizedRect *rect = [FaceMeshIOSLibNormalizedRect new];
+      rect.centerX = centerX; rect.centerY = centerY; rect.height = height; rect.width = width; rect.rotation = rotation;
+      [outRects addObject:rect];
     }
-    // TODO: MAYBE MAKE A DELEGATE METHOD HERE.
+    if([self.delegate respondsToSelector:@selector(didReceiveFaceDetections:)]) {
+      [self.delegate didReceiveFaceDetections:outRects];
+    }
+  }
+  else if (streamName == kFaceRectsOutputStream) {
+    if (packet.IsEmpty()) {
+      NSLog(@"[TS:%lld] No face rects", packet.Timestamp().Value());
+      if([self.delegate respondsToSelector:@selector(didReceiveFaces:)]) {
+        [self.delegate didReceiveFaceBoxes:@[]];
+      }
+      return;
+    }
+    const auto& face_rects_from_landmarks = packet.Get<std::vector<::mediapipe::NormalizedRect>>();
+    NSMutableArray <FaceMeshIOSLibNormalizedRect *>*outRects = [NSMutableArray new];
+    for (int face_index = 0; face_index < face_rects_from_landmarks.size(); ++face_index) {
+      const auto& face = face_rects_from_landmarks[face_index];
+      float centerX = face.x_center();
+      float centerY = face.y_center();
+      float height = face.height();
+      float width = face.width();
+      float rotation = face.rotation();
+      FaceMeshIOSLibNormalizedRect *rect = [FaceMeshIOSLibNormalizedRect new];
+      rect.centerX = centerX; rect.centerY = centerY; rect.height = height; rect.width = width; rect.rotation = rotation;
+      [outRects addObject:rect];
+    }
+    if([self.delegate respondsToSelector:@selector(didReceiveFaceBoxes:)]) {
+      [self.delegate didReceiveFaceBoxes:outRects];
+    }
   }
 }
 
@@ -211,4 +252,7 @@ static const int kNumFaces = 1;
 
 
 @implementation FaceMeshIOSLibFaceLandmarkPoint
+@end
+
+@implementation FaceMeshIOSLibNormalizedRect
 @end
